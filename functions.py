@@ -5,23 +5,38 @@ def list_doctors_by_department(department):
     try:
         conn = get_connection()
         cursor = conn.cursor()
-        cursor.execute("""
-            SELECT doctor_name, specialization 
-            FROM doctors 
-            WHERE department = %s
-        """, (department,))
-        results = cursor.fetchall()
+
+        query = """
+        SELECT doctor_name, specialization
+        FROM doctors
+        WHERE department = %s
+        """
+
+        cursor.execute(query, (department,))
+        rows = cursor.fetchall()
         cursor.close()
         conn.close()
 
-        if not results:
-            return f"No doctors found in the {department} department."
+        if not rows:
+            return f"Sorry, no doctors found in the {department} department at the moment."
 
-        doctors_info = "\n".join([f"- {name} ({specialty})" for name, specialty in results])
-        return f"I found the following doctors in {department}:\n{doctors_info}\nWould you like to check availability for any of them?"
-    
+        doctors = [f"{row[0]} ({row[1]})" for row in rows]
+
+        if len(doctors) == 1:
+            return (
+                f"There is only one doctor available in {department}:\n\n"
+                f"- {doctors[0]}\n\n"
+                f"Would you like to book an appointment with this doctor?"
+            )
+        else:
+            return (
+                f"Doctors in {department}:\n\n" +
+                "\n".join(f"- {doc}" for doc in doctors) +
+                "\n\nWhich doctor would you like to check availability for?"
+            )
+
     except Exception as e:
-        return f"An error occurred while fetching doctors: {e}"
+        return f"Error retrieving doctors from {department}: {str(e)}"
 
 def get_doctor_availability(doctor_name):
     try:
@@ -34,7 +49,8 @@ def get_doctor_availability(doctor_name):
             SELECT a.available_date, a.available_time
             FROM availability a
             JOIN doctors d ON a.doctor_id = d.doctor_id
-            WHERE d.doctor_name = %s AND a.is_booked = 0 AND a.available_date >= CURDATE()
+            WHERE d.doctor_name = %s AND a.is_booked = 0 AND (a.available_date > CURDATE()
+            OR (a.available_date = CURDATE() AND a.available_time > CURTIME()))
             ORDER BY a.available_date, a.available_time
         """
         cursor.execute(query, (doctor_name,))
